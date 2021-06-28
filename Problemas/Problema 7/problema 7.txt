@@ -1,0 +1,265 @@
+      Alta de restaurante
+
+        O
+       /|\
+       / \
+  |-----------|                                                     |-----------|
+  |           |                                                     |           |
+  | :Gerente  |                                                     | :Siestema |
+  |  ¯¯¯¯¯¯¯  |                                                     |  ¯¯¯¯¯¯¯¯ |
+  |-----------|                                                     |-----------|
+        |                                                                 |
+       |-|                                                               |-|
+       | |                                                               | |
+       | |   AltaRestaurante(nombreRestaurante, direccionRestaurante)    | |
+       | |<-------------------------------------------------------------→| |
+       | |                          : restaurante                        | |
+       | |                                                               | |
+-------| |---------------------------------------------------------------| |-----
+|loop| | |                                                               | |    |
+|¯¯¯¯  | |     AltaSala(restaurante, numeroSala, capacidadSala)          | |    |
+|      | |<-------------------------------------------------------------→| |    |
+|      | |                                                               | |    |
+-------| |---------------------------------------------------------------| |-----
+       | |                                                               | |
+       |-|                                                               |-|
+        |                                                                 |
+
+Context: Sistema::AltaRestaurante (
+    nombreRestaurante: String,
+    direccionRestaurante: String
+): Restaurante
+
+Pre:
+  -- Hay menos de 100 restaurantes
+  Restaurante.allInstances()->size() < 100
+
+  -- Todos los restaurantes de la empresa tienen un máximo de 5 salas
+  AND Restaurante.allInstances()->forAll(r | r.sala->size() <= 5)
+  -- r una vez cerrado el paréntesis deja de existir
+
+Post:
+  Restaurante.allInstances()->exists( r |
+      r.oclIsNew()                            -- Creación del objeto
+      AND r.nombre = nombreRestaurante        -- Valores de los atributos
+      AND r.direccion = direccionRestaurante
+      AND result = r                          -- Devolución de operación constructora
+    )
+
+
+Context: Sistema::AltaSala (
+    restaurante: Restaurante,
+    numeroSala: Integer,
+    capacidadSala: Integer
+)
+
+Pre:
+
+Post:
+-- Opción 1:
+Sala.allInstances()->exists(s |
+    s.oclIsNew()                      -- Creación del objeto
+    AND s.numero = numeroSala         -- Valores de los atributos
+    AND s.capacidad = capacidadSala
+    AND s.restaurante = r             -- Asociación con objeto existente referenciado
+)
+
+-- Opción 2:
+Sala.allInstances()->exists(s |
+    s.oclIsNew()                         -- Creación del objeto
+    AND s.numero = numeroSala            -- Valores de los atributos
+    AND s.capacidad = capacidadSala
+    AND s.restaurante.nombre = r.nombre  -- Asociación con objeto existente referenciado
+)
+
+-- Opción 3:
+r.sala->exists(s |
+    s.oclIsNew()                      -- Creación del objeto
+    AND s.numero = numeroSala         -- Valores de los atributos
+    AND s.capacidad = capacidadSala
+)   -- No hace falta asociar la sala con el restaurante porque creamos la sala a partir de ese restaurante
+
+
+      Alta Fiesta de Cumpleaños
+
+         O
+        /|\
+        / \
+|-----------------|                                                |-----------|
+|                 |                                                |           |
+| :Administrador  |                                                | :Siestema |
+|  ¯¯¯¯¯¯¯¯¯¯¯¯¯  |                                                |  ¯¯¯¯¯¯¯¯ |
+|-----------------|                                                |-----------|
+         |                                                                |
+        |-|                                                              |-|
+        | |                                                              | |
+        | |      AltaCumpleaños(nombreEmpresa, nombreRestaurante,        | |
+        | |         fechaFiesta, horaInicio, nombreCumpleañero,          | |
+        | |                 edadCumpleañero): fiestaCumpleaños           | |
+        | |<------------------------------------------------------------→| |
+        | |                                                              | |
+--------| |--------------------------------------------------------------| |-----
+| loop| | |                                                              | |    |
+| ¯¯¯¯  | |     AñadirOrganizador(fiestaCumpleaños, nombreOrganizador)   | |    |
+|       | |<------------------------------------------------------------→| |    |
+|       | |                                                              | |    |
+--------| |--------------------------------------------------------------| |-----
+        |-|                                                              |-|
+         |                                                                |
+
+Context: Sistema::AltaCumpleaños (
+    nombreEmpresa: String,
+    nombreRestaurante: String,
+    fechaFiesta: Date,
+    horaInicio: Integer,
+    nombreCumpleañero: String,
+    edadCumpleañero: Integer
+): Cumpleaños
+
+Pre:
+  -- Existe el cumpleañero
+  Persona.allInstances()->exists(p | p.nombre = nombreCumpleañero)
+
+  -- Existe la empresa
+  AND Empresa.allInstances->exists(e | e.nombre = nombreEmpresa)
+
+  -- Existe la fecha
+  AND Fecha.allInstances->exists(f | f.fecha = fechaFiesta)
+
+  -- Existe el restaurante
+  AND Restaurante.allInstances->exists(r | r.nombre = nombreRestaurante)
+
+Post:
+-- Opción 1: Empezando desde la clase cumpleaños (es lo mejor)
+  Cumpleaños.allInstances()->exists(c |
+      c.oclIsNew()
+      AND c.edad = edadCumpleañero
+      AND c.horaInicio = horaInicio         -- No hay que poner .fiesta porque accedemos de subclase a superclase (si fuera al revés si)
+      AND c.empresa.nombre = nombreEmpresa
+      AND c.fecha.fecha = fechaFiesta
+      AND c.restaurante.nombre = nombreRestaurante
+      AND c.homenageado.nombre = nombreCumpleañero    -- .homenageado (nombre de rol) porque así sabemos por dónde accedemos a la clase
+      AND c.tipoDeFiesta.nombre = "Cumpleaños"
+      -- Si fuera un enum => c.tipoDeFiesta.nombre = TF::Cumpleaños
+      AND Asistente.allInstances()->exists(a |        -- Empezar siempre desde la clase asociativa
+          a.oclIsNew()
+          AND a.persona.nombre = nombreCumpleañero
+          AND a.pagado     -- No es necesario poner el true
+          AND a.fiesta = c
+      )
+      AND result = c
+  )
+
+-- Opción 2: Empezando desde la clase fiesta
+Fiesta.allInstances()->exists(f |
+    f.oclIsNew()
+    AND f.oclIsTypeOf(Cumpleaños) AND f.oclAsType(Cumpleaños).edad = edadCumpleañero
+    AND f.horaInicio = horaInicio
+    AND f.empresa.nombre = nombreEmpresa
+    AND f.fecha.fecha = fechaFiesta
+    AND f.restaurante.nombre = nombreRestaurante
+    AND f.oclAsType(Cumpleaños).homenageado.nombre = nombreCumpleañero
+    AND f.tipoDeFiesta.nombre = "Cumpleaños"
+    AND Asistente.allInstances()->exists(a |
+        a.oclIsNew()
+        AND a.persona.nombre = nombreCumpleañero
+        AND a.pagado
+        AND a.fiesta = c
+    )
+    AND result = c
+)
+
+
+Context: Sistema::AñadirOrganizador(
+    fiestaCumpleaños: Fiesta,
+    nombreOrganizador: String
+)
+
+Pre:
+  -- Existe el nombre del organizador
+  Persona.allInstances()->exists(p | p.nombre = nombreOrganizador)
+
+Post:
+  -- Opción 1
+  fiestaCumpleaños.organizadores->includes(p | p.nombre = nombreOrganizador)
+  -- Opción 2
+  fiestaCumpleaños.organizadores.nombre->includes(nombreOrganizador)
+  -- Opción 3
+  fiestaCumpleaños.organizadores->exists(p | p.nombre = nombreOrganizador)
+  -- Opción 4
+  Persona.allInstances()
+    ->select(p | p.nombre = nombreOrganizador).fiesta->includes(fiestaCumpleaños)
+
+  AND Asistente.allInstances()->exists(a |
+      a.oclIsNew()
+      AND a.persona.nombre = nombreOrganizador
+      AND a.pagado
+      AND a.fiesta = fiestaCumpleaños
+  )
+
+
+        Consulta Cumpleaños Extraños
+
+      O
+     /|\
+     / \
+|-----------|                                                      |-----------|
+|           |                                                      |           |
+| :Gerente  |                                                      | :Siestema |
+|  ¯¯¯¯¯¯¯  |                                                      |  ¯¯¯¯¯¯¯¯ |
+|-----------|                                                      |-----------|
+      |                                                                  |
+     |-|                                                                |-|
+     | |                                                                | |
+     | |   ConsultaCumpleañosExtraños(nombreEmpresa): fiestasExtrañas   | |
+     | |<--------------------------------------------------------------→| |
+     | |                                                                | |
+     |-|                                                                |-|
+      |                                                                  |
+
+Context: Sistema::ConsultaCumpleañosExtraños (
+    nombreEmpresa: String
+): Set(
+        TupleType (
+          nombreCumpleañero: String,
+          nombresOrganizadores: Set(String)
+        )
+      )
+
+-- Estructura:
+--    Pre: (1)
+--    Body: let <nombre_var>: <tipos> = <expr> (2)
+--    in
+--      <nombre_var>->collect(<expr>) (3)
+
+Pre:
+  -- La empresa a organizado como mínimo 1 fiesta de cada tipo que ofrece
+
+  -- Opción 1
+  Empresa.allInstances()->select(e |
+    e.nombre = nomEmpresa
+    AND e.Fiesta.TipoDeFiesta->includesAll(e.tipoDeFiesta)
+  )
+
+  -- Opción 2
+  e.tipoDeFiesta->forAll(tf |
+    tf.fiesta->select(f | f.empresa = e)->size() > 0
+  )
+
+Body:
+  let fiestasExtrañas: Set(Cumpleaños) = Cumpleaños.allInstances()->select(fa |
+      fa.empresa.nombre = nombreEmpresa
+      AND fa.participantes->size() > 30
+
+      -- Opción 1
+      AND fa.homenajeado->exclude(fa.homenajeado)
+      -- Opción 2
+      AND fa.homenajeado->size() = 0
+    )
+  in
+    fiestasExtrañas->collect(fa |
+      Tuple {
+        nombreCumpleañero = fa.homenajeado.nombre,
+        nombresOrganizadores = fa.organizadores.nombre  -- Se pueden devolver sets de golpe
+      }
+    )

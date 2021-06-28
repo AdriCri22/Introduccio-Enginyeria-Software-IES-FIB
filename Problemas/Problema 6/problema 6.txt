@@ -1,0 +1,171 @@
+      Alta Animal
+
+      O
+     /|\
+     / \
+|-----------|                                                      |-----------|
+|           |                                                      |           |
+| :Auxiliar |                                                      | :Siestema |
+|  ¯¯¯¯¯¯¯  |                                                      |  ¯¯¯¯¯¯¯¯ |
+|-----------|                                                      |-----------|
+      |                                                                  |
+     |-|                                                                |-|
+     | |                                                                | |
+     | |   AltaAnimal(nomAnimal, sexe, agressiu, nomEspecie,            | |
+     | |                     nomPropietari, poblacio)                   | |
+     | |<--------------------------------------------------------------→| |
+     | |                                                                | |
+     | |                                                                | |
+     |-|                                                                |-|
+      |                                                                  |
+
+Context: Sistema::AltaAnimal (
+    nomAnimal: String,
+    sexe: TSexe,
+    agressiu: bool,
+    nomEspecie: String,
+    nomPropietari: String,
+    poblacio: Integer
+)
+
+Pre:
+  // Existeix especie
+  Especie.AllInstances()->exists(e | e.nom = nomEspecie)
+
+Post/Body:
+  if not Persona.allInstances()@pre->exists(p | p.nom = nomPropietari) then
+    Persona.allInstances()->exists(p |
+        p.oclIsNew()
+        AND p.nom = nomPropietari
+        AND p.poblacio = poblacio)
+  end
+  AND Animal.allInstances()->exists(a |
+    a.oclIsNew()
+    AND a.nom = nomAnimal
+    AND a.sexe = sexe
+    AND a.especie = nomEspecie
+    AND a.propietari.nom = nomPropietari
+    AND if (nomEspecie = "Gos") then
+      a.oclIsTypeOf(Gos)
+      AND a.oclAstype(Gos).agressiu = agressiu
+      end
+    )
+
+
+      Consulta Gossos Perillosos no Esterilitzats
+
+      O
+     /|\
+     / \
+|-----------|                                                      |-----------|
+|           |                                                      |           |
+| :Auxiliar |                                                      | :Siestema |
+|  ¯¯¯¯¯¯¯  |                                                      |  ¯¯¯¯¯¯¯¯ |
+|-----------|                                                      |-----------|
+      |                                                                  |
+     |-|                                                                |-|
+     | |                                                                | |
+     | |           ConsultaGossosNoEsterilitzats(població)              | |
+     | |<--------------------------------------------------------------→| |
+     | |                          :Llista                               | |
+     | |                                                                | |
+     |-|                                                                |-|
+      |                                                                  |
+
+
+Context: Sistema::ConsultaGossosNoEsterilitzats(
+    poblacio: String
+): Set(TupleType(
+    nomGos: String,
+    nomPropietari: String,
+    esVeterinari: bool
+  )
+)
+
+Pre:
+  // Persona viu a la població i te un animal
+  Animal.allInstances()->exists(a | a.propietari.poblacio = poblacio)
+
+Body:
+  result = Gos.allInstances()->select(g |
+    g.agressiu = true,
+    AND g.sexe = TSexe::mascle
+    AND NOT g.operacio.motiu->includes("esterilitzacio")
+    AND g.propietari.poblacio = poblacio
+  )->collect(g |
+      Tuple {
+        nomGos = g.nom,
+        nomPropietari = g.propietari.nom,
+        esVeterinari = g.propietari.oclIsTypeOf(Veterinari)
+      }
+    )
+
+
+      Alta Operació Urgent
+
+         O
+        /|\
+        / \
+|-----------------|                                                |-----------|
+|                 |                                                |           |
+|   :Veterinari   |                                                | :Siestema |
+|    ¯¯¯¯¯¯¯¯¯¯   |                                                |  ¯¯¯¯¯¯¯¯ |
+|-----------------|                                                |-----------|
+         |                                                                |
+        |-|                                                              |-|
+        | |                                                              | |
+        | |      AltaOperacioFinalitzada(exitosa, horaFi, horaInici,     | |
+        | |            motiu, data, nomAnimal, numColegiat): op          | |
+        | |<------------------------------------------------------------→| |
+        | |                                                              | |
+--------| |--------------------------------------------------------------| |-----
+| loop| | |                                                              | |    |
+| ¯¯¯¯  | |          AfegirMedicament(numMedicament, dosi, op)           | |    |
+|       | |<------------------------------------------------------------→| |    |
+|       | |                                                              | |    |
+--------| |--------------------------------------------------------------| |-----
+        |-|                                                              |-|
+         |                                                                |
+
+Context: Sistema::AltaOperacioFinalitzada (
+    exitosa: bool,
+    horaFi: Hora,
+    horaInici: Hora,
+    motiu: String,
+    data: Data,
+    nomAnimal: String
+    numColegiat: int
+): op: OperacioFinalitzada
+
+Pre:
+  Veterinari.allInstances()->exists(v |
+    v.numCol = numColegiat
+    AND v.especie.animal.nom->includes(nomAnimal))
+
+Post:
+  OperacioFinalitzada.allInstances()->exists(o |
+  o.oclIsNew()
+  AND o.horaFi = horaFi
+  AND o.horaInici = horaInici
+  AND o.exitosa = exitosa
+  AND o.motiu = motiu
+  AND data.data = DataAND o.veterinari.numCol = numColegiat
+  AND o.animal.nom = nomAnimal
+  AND result = o)
+
+
+Context: Sistema:: AfegirMedicament(
+    numMedicament: Integer,
+    dosi: String
+    op: OperacioFinalitzada
+)
+
+Pre:
+  Medicament.allInstances()->exists(m | m.nom = nomMedicament)
+
+Post:
+  MedicamentAdministrat.allInstances()->exists(ma |
+    ma.dosi = dosi
+    AND ma.medicament.nom = nomMedicament
+    AND ma.OperacioFinalitzada = op
+    AND ma.oclIsNew())

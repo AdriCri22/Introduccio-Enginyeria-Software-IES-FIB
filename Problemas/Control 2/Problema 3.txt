@@ -1,0 +1,185 @@
+    Alta Inscripció
+
+      O
+     /|\
+     / \
+|--------------|                                                   |----------|
+|              |                                                   |          |
+| :Participant |                                                   | :Sistema |
+|  ‾‾‾‾‾‾‾‾‾‾‾ |                                                   |  ‾‾‾‾‾‾‾ |
+|--------------|                                                   |----------|
+       |                                                                 |
+      |-|                                                               |-|
+      | |                                                               | |
+      | |   AltaInscripcio(dniParticipant, nomTaller, avaluacioPreu)    | |
+      | |<-------------------------------------------------------------→| |
+      | |                                                               | |
+      | |                                                               | |
+      |-|                                                               |-|
+       |                                                                 |
+
+Context: Sistema::AltaInscripcio (
+  dniParticipant: String,
+  nomTaller: String,
+  avaluacioPreu: TPreu
+)
+
+Pre:
+  -- Existeix dniParticipant
+  Persona.allInstances()->exists(p | p.dni = dniParticipant)
+  -- Existeix nomTaller
+  Taller.allInstances()->exists(t | t.nom = nomTaller)
+
+Post:
+  Inscripcio.allInstances->exists(i |
+    i.oclIsNew()
+    AND i.persona.dni = dniParticipant
+    AND i.taller.nom = nomTaller
+    AND if Taller.allInstances()->exists(t |
+        t.nom = nomTaller
+        AND t.oclIsTypeOf(TallerDePagament)
+      ) then
+        i.oclIsTypeOf(InscripcioDePagament)
+        AND i.oclAsType(InscripcioDePagament).pagada = false
+        AND i.oclAsType(InscripcioDePagament).avaluacioPreu = avaluacioPreu
+    end
+  )
+
+
+    AltaReserva
+
+       O
+      /|\
+      / \
+|---------------|                                                  |----------|
+|               |                                                  |          |
+| :Organitzador |                                                  | :Sistema |
+|  ‾‾‾‾‾‾‾‾‾‾‾‾ |                                                  |  ‾‾‾‾‾‾‾ |
+|---------------|                                                  |----------|
+        |                                                                |
+       |-|                                                              |-|
+       | |                                                              | |
+       | |   AltaReserva(dniOrganitzador, nomTaller, codiSala, data,    | |
+       | |                   hora, durada): reserva                     | |
+       | |<------------------------------------------------------------→| |
+       | |                                                              | |
+       | |                                                              | |
+-------| |--------------------------------------------------------------| |-----
+|loop| | |                                                              | |    |
+|¯¯¯¯  | |        AfegirRecurs(reserva, codiRecurs, tipusRecurs)        | |    |
+|      | |<------------------------------------------------------------→| |    |
+|      | |                                                              | |    |
+-------| |--------------------------------------------------------------| |-----
+       | |                                                              | |
+       |-|                                                              |-|
+        |                                                                |
+
+Context: Sistema::AltaReserva (
+  dniOrganitzador: String,
+  nomTaller: String,
+  codiSala: String,
+  data: Date,
+  hora: Hora,
+  durada: int
+): Reserva
+
+Pre:
+  -- Existeix l'Organitzador
+  Persona.allInstances()->exists(p | p.dni = dniOrganitzador)
+  -- Existeix el Taller
+  Taller.allInstances()->exists(t | t.nom = nomTaller)
+  -- Existeix la Sala
+  Sala.allInstances()->exists(s | s.codi = codiSala)
+  -- Existeix la data y hora
+  DataHora.allInstances()->exists(dh | dh.data = data AND dh.hora = hora)
+
+Post:
+  Reserva.allInstances()->exists(r |
+    r.oclIsNew()
+    AND r.sala.codi = codiSala
+    AND r.dataHora.data = data
+    AND r.dataHora.hora = hora
+    AND r.taller.nom = nomTaller
+    AND r.Organitzador.dni = dniOrganitzador
+    AND r.durada = durada
+    AND result = r
+  )
+
+Context: Sistema::AfegirRecurs (
+  reserva: Reserva,
+  codiRecurs: String,
+  tipusRecurs: String
+)
+
+Pre:
+
+Post:
+  if not Recurs.allInstances()->exists(r | r.codi = codiRecurs) then
+    Recurs.allInstances()->exists(r |
+      r.oclIsNew()
+      AND r.codi = codiRecurs
+      AND r.tipusRecurs = tipusRecurs
+    )
+  end
+  AND Recurs.allInstances()->exists(r |
+    r.codi = codiRecurs
+    AND r.reserva = reserva
+  )
+
+
+    ConsultaReservesExitoses
+
+        O
+       /|\
+       / \
+|----------------|                                                 |----------|
+|                |                                                 |          |
+| :Administrador |                                                 | :Sistema |
+|  ‾‾‾‾‾‾‾‾‾‾‾‾‾ |                                                 |  ‾‾‾‾‾‾‾ |
+|----------------|                                                 |----------|
+        |                                                                |
+       |-|                                                              |-|
+       | |                                                              | |
+       | |       ConsultaReservesExitoses(nomTaller): reserves          | |
+       | |<------------------------------------------------------------→| |
+       | |                                                              | |
+       | |                                                              | |
+       |-|                                                              |-|
+        |                                                                |
+
+Context: Sistema:ConsultaReservesExitoses (
+  nomTaller: String
+): Set(
+  TupleType (
+    codiSala: String,
+    data: String,
+    hora: String,
+    correusParticipants: Set(String)
+  )
+)
+
+Pre:
+  -- Hi han com a mínim 3 inscripcions al taller pagades i amb avaluació de barat
+  InscripcioDePagament.allInstances()->select(i |
+    i.taller.nom = nomTaller
+    AND i.taller.oclIsTypeOf(TallerDePagament)
+    AND i.pagada
+    AND i.avaluacioPreu = TPreu::barat
+  )->size() >= 3
+
+Body:
+  let reserves: Set(Reserva) = Reserva.allInstances()->select(r |
+    r.taller.nom = nomTaller
+    AND r.valoracio->select(v |
+      v.puntuacio = TPuntuacio::5
+      AND v.reserva = r
+    )->size() > 5
+  ) in
+    reserves->collect(r |
+      Tuple {
+        codiSala = r.ala.codi,
+        data = r.dataHora.data,
+        hora = r.dataHora.hora,
+        correusParticipants = r.taller.participants.correuE
+      }
+    )

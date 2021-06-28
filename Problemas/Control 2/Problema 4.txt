@@ -1,0 +1,180 @@
+    Crear una Línia
+
+         O
+        /|\
+        / \
+    |----------|                                                   |----------|
+    |          |                                                   |          |
+    | :Empleat |                                                   | :Sistema |
+    |  ‾‾‾‾‾‾‾ |                                                   |  ‾‾‾‾‾‾‾ |
+    |----------|                                                   |----------|
+         |                                                               |
+        |-|                                                             |-|
+        | |                                                             | |
+        | |                 AltaLinia(numero): linia                    | |
+        | |<-----------------------------------------------------------→| |
+        | |                                                             | |
+--------| |-------------------------------------------------------- ----| |-----
+| loop| | |                                                             | |    |
+| ¯¯¯¯  | |                 AssignarBus(linia, matricula)                | |    |
+|       | |<-----------------------------------------------------------→| |    |
+|       | |                                                             | |    |
+--------| |-------------------------------------------------------------| |-----
+        | |                                                             | |
+--------| |-------------------------------------------------------- ----| |-----
+| loop| | |                                                             | |    |
+| ¯¯¯¯  | |                 AssignarParada(linia, nom)                  | |    |
+|       | |<-----------------------------------------------------------→| |    |
+|       | |                                                             | |    |
+--------| |-------------------------------------------------------------| |-----
+        |-|                                                             |-|
+         |                                                               |
+
+Context: Sistema::AltaLinia (
+  numero: int
+): Linia
+
+Pre:
+
+Post:
+  Linia.allInstances()->exists(l |
+    l.oclIsNew()
+    AND l.numero = numero
+    AND result = l
+  )
+
+Context: Sistema::AssignarBus(
+  linia: Linia,
+  matricula: String
+)
+
+Pre:
+  -- Existeix el Bus
+  Bus.allInstances()->exists(b | b.matricula = matricula)
+
+Post:
+  Bus.allInstances()->exists(b | b.linia = linia)
+
+Context: Sistema::AssignarParada(
+  linia: Linia,
+  nom: String
+)
+
+Pre:
+
+Post:
+  if not Parada.allInstances()->exists(p | p.nom = nom) then
+    Parada.allInstances()->exists(p |
+      p.oclIsNew()
+      AND p.nom = nom
+    )
+  end
+  AND Parada.allInstances()->exists(p | p.linia = linia)
+
+
+    Assignar un Torn a un Conductor
+
+         O
+        /|\
+        / \
+|------------------|                                               |----------|
+|                  |                                               |          |
+| :Cap de Personal |                                               | :Sistema |
+|  ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾ |                                               |  ‾‾‾‾‾‾‾ |
+|------------------|                                               |----------|
+         |                                                               |
+        |-|                                                             |-|
+        | |                                                             | |
+        | |       AssignarTornConductor(dniConductor, data, torn,       | |
+        | |                     dniSuplent, nomSuplent)                 | |
+        | |<-----------------------------------------------------------→| |
+        | |                                                             | |
+        | |                                                             | |
+        |-|                                                             |-|
+         |                                                               |
+
+Context: Sistema::AssignarTornConductor (
+  dniConductor: String,
+  data: Date,
+  torn: TipusTorn
+)
+
+Pre:
+  -- Existeix la data
+  Data.allInstances()->exists(d | d.data = data)
+  -- Existeix el torn
+  Data.allInstances()->exists(t | t.torn= torn)
+  -- Existeix el conductor (el principal, no el suplent)
+  Conductor.allInstances()->exists(c | c.dni = dniConductor)
+
+Post:
+  TornTreballat.allInstances()->exists(tt |
+    tt.oclIsNew()
+    AND tt.conductor.dni = dniConductor
+    AND tt.data = data
+    AND tt.torn = torn
+    if (torn = TipusTorn::nit) then
+      if not Conductor.allInstances()@pre->exists(c | c.dni = dniSuplent) then
+        Conductor.allInstances()->exists(c |
+          c.oclIsNew()
+          AND c.dni = dniSuplent
+          AND c.nom = nomSuplent
+        )
+      end
+      AND tt.suplent.dni = dniSuplent
+    end
+  )
+
+
+
+    Consultar Conductors Suplents
+
+         O
+        /|\
+        / \
+|------------------|                                               |----------|
+|                  |                                               |          |
+| :Cap de Personal |                                               | :Sistema |
+|  ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾ |                                               |  ‾‾‾‾‾‾‾ |
+|------------------|                                               |----------|
+         |                                                               |
+        |-|                                                             |-|
+        | |                                                             | |
+        | |  ConsultaConductorsSuplents(dataInici, dataFi): conductors  | |
+        | |<-----------------------------------------------------------→| |
+        | |                                                             | |
+        | |                                                             | |
+        |-|                                                             |-|
+         |                                                               |
+
+Context: Sistema::ConsultaConductorsSuplents (
+  dataInici: Date,
+  dataFi: Date
+): Set (
+    TupleType (
+      dniConductor: String,
+      numLinies: Set(int)
+    )
+  )
+
+Pre:
+  -- Existeix dataInici
+  Data.allInstances()->exists(d | d.data = dataInici)
+  -- Existeix dataFi
+  Data.allInstances()->existeix(d | d.data = dataFi)
+
+Body:
+  let conductors: Set(Conductor) = Conductor.allInstances()->select(c |
+    TornNocturn.allInstances()->select(tn |
+      tn.suplent = c
+      AND tn.data.data >= dataInici
+      AND tn.data.data <= dataFi
+    )->size() <= 1
+  )
+  in
+    conductors->collect(c |
+      Tuple {
+        dniConductor = c.dni,
+        numLinies = c.linies.numero
+      }
+    )

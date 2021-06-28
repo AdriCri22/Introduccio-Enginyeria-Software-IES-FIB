@@ -1,0 +1,192 @@
+    Alta Exemplar
+
+      O
+     /|\
+     / \
+|-----------|                                                      |----------|
+|           |                                                      |          |
+| :Director |                                                      | :Sistema |
+|  ‾‾‾‾‾‾‾‾ |                                                      |  ‾‾‾‾‾‾‾ |
+|-----------|                                                      |----------|
+      |                                                                  |
+     |-|                                                                |-|
+     | |                                                                | |
+     | |  AltaExemplar(nomExemplar, sexeExemplar, nomEspecie, minimKg,  | |
+     | |                          maximKg, fertil)                      | |
+     | |<--------------------------------------------------------------→| |
+     | |                                                                | |
+     | |                                                                | |
+     |-|                                                                |-|
+      |                                                                  |
+
+Context: Sistema::AltaExemplar (
+  nomExemplar: String,
+  sexeExemplar: TipusSexe,
+  nomEspecie: String,
+  minimKg: int,
+  maximKg: int,
+  fertil: bool
+)
+
+Pre:
+  -- Existeix la espècie
+  -- La espècie està  assignada a una zona amb almenys dues espècies assignadas
+  Zona.allInstances()->exists(z |
+    z.especie.nom = nomEspecie
+    AND z.especie->size() > 1
+  )
+
+Post:
+  Exemplar.allInstances()->exists(e |
+    e.oclIsNew()
+    AND e.nom = nomExemplar
+    AND e.sexe = sexeExemplar
+    AND if (nomEspecie = "Lleo") then
+      e.oclIsTypeOf(Lleo)
+      AND e.oclAsType(Lleo).minimKg = minimKg
+      AND e.oclAsType(Lleo).maximKg = maximKg
+      AND if (sexe = TipusSexe::Femeni) then
+        e.oclIsTypeOf(LleoFemella)
+        AND e.oclAsType(LleoFemella).fertil = fertil
+      end
+    end
+  )
+
+
+    Alta Zona
+
+         O
+        /|\
+        / \
+  |--------------|                                                    |----------|
+  |              |                                                    |          |
+  | :Encarregat  |                                                    | :Sistema |
+  |  ‾‾‾‾‾‾‾‾‾‾  |                                                    |  ‾‾‾‾‾‾‾ |
+  |--------------|                                                    |----------|
+          |                                                                 |
+         |-|                                                               |-|
+         | |                                                               | |
+         | |                  AltaZona(nomZona): zona                      | |
+         | |<-------------------------------------------------------------→| |
+         | |                                                               | |
+-------- | |---------------------------------------------------------------| |-------
+|loop|   | |                                                               | |      |
+|¯¯¯¯    | |        AssignaEspecie(zona, nomEspecie): especie              | |      |
+|        | |<-------------------------------------------------------------→| |      |
+|        | |                                                               | |      |
+| -------| |---------------------------------------------------------------| |----- |
+| |loop| | |                                                               | |    | |
+| |¯¯¯¯  | |    AltaLocalitzacio(especie, nomPais, estatConservacio)       | |    | |
+| |      | |<-------------------------------------------------------------→| |    | |
+| |      | |                                                               | |    | |
+| -------| |---------------------------------------------------------------| |----- |
+|        | |                                                               | |      |
+---------| |---------------------------------------------------------------| |-------
+         |-|                                                               |-|
+          |                                                                 |
+
+Context: Sistema::AltaZona (
+  nomZona: String
+): Zona
+
+Pre:
+
+Post:
+  Zona.allInstances()->exists(z |
+    z.oclIsNew()
+    AND z.nom = nomZona
+    AND result = z
+  )
+
+Context: Sistema::AssignaEspecie(
+  zona: Zona,
+  nomEspecie: String
+): Especie
+
+Pre:
+
+Post:
+  if not Especie.allInstances()@pre->exists(e | e.nom = nomEspecie) then
+    Especie.allInstances()->exists(e |
+      e.oclIsNew()
+      AND e.nom = nomEspecie
+    )
+  end
+  AND Especie.allInstances()->exists(e |
+    e.nom = nomEspecie
+    AND e.zona = z
+    AND result = e
+  )
+
+Context: Sistema::AltaLocalitzacio (
+  especie: Especie,
+  nomPais: String,
+  estatConservacio: TipusEstat
+)
+
+Pre:
+  -- Existeix el país
+  Pais.allInstances()->exists(p | p.nom = nomPais)
+
+Post:
+  Localitzacio.allInstances()->exists(l |
+    l.oclIsNew()
+    AND l.estatConservacio = estatConservacio
+    AND l.especie = especie
+    AND l.pais.nom = nomPais
+  )
+
+
+    Consulta Agressions Rellevants
+
+       O
+      /|\
+      / \
+|-------------|                                                    |----------|
+|             |                                                    |          |
+| :Veterinari |                                                    | :Sistema |
+|  ‾‾‾‾‾‾‾‾‾‾ |                                                    |  ‾‾‾‾‾‾‾ |
+|-------------|                                                    |----------|
+       |                                                                 |
+      |-|                                                               |-|
+      | |                                                               | |
+      | |     ConsultaAgressionsRellevants(nomExemplar): agressions     | |
+      | |<-------------------------------------------------------------→| |
+      | |                                                               | |
+      | |                                                               | |
+      |-|                                                               |-|
+       |                                                                 |
+
+Context: Sistema::ConsultaAgressionsRellevants (
+  nomExemplar: String
+): Set (
+    TupleType (
+      data: Date,
+      nomExemplarsFerits: Set(String)
+    )
+  )
+
+Pre:
+  -- L'exemplar agressor és una especie que no està en perill a tots els països on es localitza
+  Exemplar.allInstances()->exists(e |
+    e.nom = nomExemplar
+    AND Localitzacio.allInstances()->select(l |
+      l.especie = e.especie
+    )->forAll(l | l.estatConservacio = TipusEstat::SensePerill)
+  )
+
+Body:
+  let agressions: Set(Agressio) = Agressio.allInstances()->select(a |
+    a.agressor.nom = nomExemplar
+    AND Localitzacio.allInstances()->exists(l |
+      l.especie = a.ferit.especie
+      AND l.estatConservacio = TipusEstat::EnPerillGreu
+    )
+  )
+  in
+    agressions->collect(a |
+      Tuple {
+        data = g.data.data,
+        nomExemplarsFerits = g.ferits.nom
+      }
+    )
